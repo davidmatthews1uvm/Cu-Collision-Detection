@@ -4,7 +4,6 @@
 
 
 #include "../include/CollisionSystem.cuh"
-#include "../include/Utils.cuh"
 
 CollisionSystem::CollisionSystem(size_t n, size_t maxCollisionsPerObject, bool toAllocHostVecs) :
         N(n), MAX_COLLISIONS_PER_OBJECT(maxCollisionsPerObject) {
@@ -27,8 +26,9 @@ CollisionSystem::CollisionSystem(size_t n, size_t maxCollisionsPerObject, bool t
     num_collisions_d = thrust::device_vector<int>(1);
 
     // CUB sort buffer
-    cub_sort_bytes_size = sizeof(unsigned long long int) * 4 * RESERVATION_SIZE; // Enough memory to sort the morton numbers.
+    cub_sort_bytes_size = 1; // enlarge upon request in kernels.
     cudaMalloc(&cub_sort_bytes_ptr, cub_sort_bytes_size);
+    CUDA_CHECK_AFTER_CALL();
 
     // device
     x_pos_d = thrust::device_vector<float>(N);
@@ -74,7 +74,6 @@ CollisionSystem::CollisionSystem(size_t n, size_t maxCollisionsPerObject, bool t
 
     // init flags to zero.
     thrust::fill(thrust::device, internal_node_bbox_complete_flag_d_ptr, internal_node_bbox_complete_flag_d_ptr + N - 1, 0);
-
 }
 
 CollisionSystem::~CollisionSystem() {
@@ -101,13 +100,11 @@ void CollisionSystem::set_num_masses(size_t n) {
         y_pos_d.resize(N);
         z_pos_d.resize(N);
         radius_d.resize(N);
-
         tmp_pos_d.resize(N);
 
         x_rank_d.resize(N);
         y_rank_d.resize(N);
         z_rank_d.resize(N);
-
         tmp_id_a_d.resize(N);
         tmp_id_b_d.resize(N);
 
@@ -117,11 +114,11 @@ void CollisionSystem::set_num_masses(size_t n) {
 
         leaf_parent_d.resize(N);
 
-        internal_parent_d.resize(N);
-        internal_childA_d.resize(N);
-        internal_childB_d.resize(N);
+        internal_parent_d.resize(N - 1);
+        internal_childA_d.resize(N - 1);
+        internal_childB_d.resize(N - 1);
 
-        internal_node_bbox_complete_flag.resize(N, 0);
+        internal_node_bbox_complete_flag.resize(N - 1, 0);
 
         bounding_boxes_d.resize(2 * N - 1);
 
@@ -173,11 +170,6 @@ void CollisionSystem::set_reserved_num_masses(size_t n) {
         delete[] host_collisions_a;
         host_collisions_a = tmp_h;
     }
-
-    // CUB sort buffer
-    cudaFree(cub_sort_bytes_ptr);
-    cub_sort_bytes_size = sizeof(unsigned long long int) * 4 * RESERVATION_SIZE; // Enough memory to sort the morton numbers.
-    cudaMalloc(&cub_sort_bytes_ptr, cub_sort_bytes_size);
 
 
     // device
@@ -349,15 +341,22 @@ void CollisionSystem::update_x_pos_ranks() {
     // keep track of x object ids after sorting.
     thrust::sequence(thrust::device, tmp_id_a_d_ptr, tmp_id_a_d_ptr + N);
 
-
     // copy x positions to tmp one that will get mutated
 //    thrust::copy(thrust::device, x_pos_d_ptr, x_pos_d_ptr + N , tmp_pos_d_ptr);
 
     // sort the positions to determine new ranks.
 //    thrust::sort_by_key(thrust::device, tmp_pos_d_ptr, tmp_pos_d_ptr + N, tmp_id_a_d_ptr);
 
-    cub::DeviceRadixSort::SortPairs(cub_sort_bytes_ptr, cub_sort_bytes_size, x_pos_d_ptr, tmp_pos_d_ptr, tmp_id_a_d_ptr, tmp_id_b_d_ptr, N);
-
+    size_t curr_size;
+    cub::DeviceRadixSort::SortPairs(NULL, curr_size, x_pos_d_ptr, tmp_pos_d_ptr, tmp_id_a_d_ptr, tmp_id_b_d_ptr, N);
+    if (curr_size > cub_sort_bytes_size) {
+        cub_sort_bytes_size = curr_size;
+        cudaFree(cub_sort_bytes_ptr);
+        cudaMalloc(&cub_sort_bytes_ptr, cub_sort_bytes_size);
+    }
+    cub::DeviceRadixSort::SortPairs(cub_sort_bytes_ptr, curr_size, x_pos_d_ptr, tmp_pos_d_ptr, tmp_id_a_d_ptr, tmp_id_b_d_ptr, N);
+    // assert(thrust::is_sorted(thrust::device, tmp_pos_d_ptr, tmp_pos_d_ptr+N ));
+    
     // save the new rank information
     thrust::scatter(thrust::device, start, end, tmp_id_b_d_ptr, x_rank_d_ptr);
 }
@@ -372,7 +371,15 @@ void CollisionSystem::update_y_pos_ranks() {
 
     // sort the positions to determine rank.
 //    thrust::sort_by_key(thrust::device, tmp_pos_d_ptr, tmp_pos_d_ptr + N, tmp_id_a_d_ptr);
-    cub::DeviceRadixSort::SortPairs(cub_sort_bytes_ptr, cub_sort_bytes_size, y_pos_d_ptr, tmp_pos_d_ptr, tmp_id_a_d_ptr, tmp_id_b_d_ptr, N);
+    size_t curr_size;
+    cub::DeviceRadixSort::SortPairs(NULL, curr_size, y_pos_d_ptr, tmp_pos_d_ptr, tmp_id_a_d_ptr, tmp_id_b_d_ptr, N);
+    if (curr_size > cub_sort_bytes_size) {
+        cub_sort_bytes_size = curr_size;
+        cudaFree(cub_sort_bytes_ptr);
+        cudaMalloc(&cub_sort_bytes_ptr, cub_sort_bytes_size);
+    }
+    cub::DeviceRadixSort::SortPairs(cub_sort_bytes_ptr, curr_size, y_pos_d_ptr, tmp_pos_d_ptr, tmp_id_a_d_ptr, tmp_id_b_d_ptr, N);
+    // assert(thrust::is_sorted(thrust::device, tmp_pos_d_ptr, tmp_pos_d_ptr+N ));
 
     // save the new rank information
     thrust::scatter(thrust::device, start, end, tmp_id_b_d_ptr, y_rank_d_ptr);
@@ -388,7 +395,15 @@ void CollisionSystem::update_z_pos_ranks() {
 
     // sort the positions to determine rank.
 //    thrust::sort_by_key(thrust::device, tmp_pos_d_ptr, tmp_pos_d_ptr + N, tmp_id_a_d_ptr);
-    cub::DeviceRadixSort::SortPairs(cub_sort_bytes_ptr, cub_sort_bytes_size, z_pos_d_ptr, tmp_pos_d_ptr, tmp_id_a_d_ptr, tmp_id_b_d_ptr, N);
+    size_t curr_size;
+    cub::DeviceRadixSort::SortPairs(NULL, curr_size, z_pos_d_ptr, tmp_pos_d_ptr, tmp_id_a_d_ptr, tmp_id_b_d_ptr, N);
+    if (curr_size > cub_sort_bytes_size) {
+        cub_sort_bytes_size = curr_size;
+        cudaFree(cub_sort_bytes_ptr);
+        cudaMalloc(&cub_sort_bytes_ptr, cub_sort_bytes_size);
+    }
+    cub::DeviceRadixSort::SortPairs(cub_sort_bytes_ptr, curr_size, z_pos_d_ptr, tmp_pos_d_ptr, tmp_id_a_d_ptr, tmp_id_b_d_ptr, N);
+    // assert(thrust::is_sorted(thrust::device, tmp_pos_d_ptr, tmp_pos_d_ptr+N ));
 
     // save the new rank information
     thrust::scatter(thrust::device, start, end, tmp_id_b_d_ptr, z_rank_d_ptr);
@@ -404,11 +419,18 @@ void CollisionSystem::update_mortons() {
 
     thrust::copy(thrust::device, mortons_d_ptr, mortons_d_ptr + N, mortons_tmp_d_ptr); // copy mortons to tmp array as source for sorting.
 
+
     // sort morton numbers
 //    thrust::sort_by_key(thrust::device, mortons_d_ptr, mortons_d_ptr + N, mortons_id_d_ptr);
-
-    cub::DeviceRadixSort::SortPairs(cub_sort_bytes_ptr, cub_sort_bytes_size, mortons_tmp_d_ptr, mortons_d_ptr, tmp_id_a_d_ptr, mortons_id_d_ptr, N);
-
+    size_t curr_size;
+    cub::DeviceRadixSort::SortPairs(NULL, curr_size, mortons_tmp_d_ptr, mortons_d_ptr, tmp_id_a_d_ptr, mortons_id_d_ptr, N);
+    if (curr_size > cub_sort_bytes_size) {
+        cub_sort_bytes_size = curr_size;
+        cudaFree(cub_sort_bytes_ptr);
+        cudaMalloc(&cub_sort_bytes_ptr, cub_sort_bytes_size);
+    }
+    cub::DeviceRadixSort::SortPairs(cub_sort_bytes_ptr, curr_size, mortons_tmp_d_ptr, mortons_d_ptr, tmp_id_a_d_ptr, mortons_id_d_ptr, N);
+    // assert(thrust::is_sorted(thrust::device, mortons_d_ptr, mortons_d_ptr+N ));
 }
 
 __host__ __device__
@@ -433,32 +455,38 @@ void CollisionSystem::update_mortons_fast(float2 xlims, float2 ylims, float2 zli
 
 __host__ __device__
 void CollisionSystem::build_tree() {
-    int num_SM, curDeviceId, gridSize, blockSize;
-    cudaGetDevice(&curDeviceId);
-    cudaDeviceGetAttribute(&num_SM, cudaDevAttrMultiProcessorCount, curDeviceId);
-    blockSize = (int)(N-1)/num_SM;
-    if (num_SM * blockSize < (N-1)) {
-        blockSize += 1;
-    }
-    if (blockSize > 256) {
-        blockSize = 256;
-        gridSize = ((int)N + 254)/256; // N - 1 + 255 leaf nodes.
-    } else {
-        gridSize = num_SM;
-    }
-    build_tree_kernel<<<gridSize, blockSize>>>(0, N - 1, build_bvh_tree);
-    CUDA_CHECK_AFTER_CALL();
-    VcudaDeviceSynchronize();
+    build_bvh_tree.N = N;
+    thrust::for_each(thrust::device, start, start + N - 1 , build_bvh_tree);
+
+    // int num_SM, curDeviceId, gridSize, blockSize;
+    // cudaGetDevice(&curDeviceId);
+    // cudaDeviceGetAttribute(&num_SM, cudaDevAttrMultiProcessorCount, curDeviceId);
+    // blockSize = (int)(N-1)/num_SM;
+    // if (num_SM * blockSize < (N-1)) {
+    //     blockSize += 1;
+    // }
+    // if (blockSize > 256) {
+    //     blockSize = 256;
+    //     gridSize = ((int)N + 254)/256; // N - 1 + 255 leaf nodes.
+    // } else {
+    //     gridSize = num_SM;
+    // }
+    // build_tree_kernel<<<gridSize, blockSize>>>(0, N - 1, build_bvh_tree);
+    // CUDA_CHECK_AFTER_CALL();
+    // VcudaDeviceSynchronize();
 }
 
 __host__ __device__
 void CollisionSystem::update_bounding_boxes() {
-    thrust::for_each(thrust::device, start, end, compute_bounding_boxes);
+    compute_bounding_boxes.N = N;
+    thrust::for_each(thrust::device, start, start + N, compute_bounding_boxes);
 }
 
 __host__
 int CollisionSystem::find_collisions() {
     potential_collisions_idx[0] = 0;
+    find_potential_collisions.N = N;
+    find_potential_collisions.NUM_INTERNAL = N - 1;
     thrust::for_each(thrust::device, start + N - 1, start + 2 * N - 1, find_potential_collisions);
 
     if (potential_collisions_idx[0] > MAX_COLLISIONS_PER_OBJECT * N) {
@@ -478,6 +506,8 @@ int CollisionSystem::find_collisions() {
 __device__
 int CollisionSystem::find_collisions_device() {
     potential_collisions_idx_d_ptr[0] = 0;
+    find_potential_collisions.N = N;
+    find_potential_collisions.NUM_INTERNAL = N - 1;
 
     int num_SM, curDeviceId, gridSize, blockSize;
     cudaGetDevice(&curDeviceId);
@@ -500,13 +530,15 @@ int CollisionSystem::find_collisions_device() {
         num_collisions_d_ptr[0] = -1;
         return -1;
     }
+    num_collisions_d_ptr[0] = potential_collisions_idx_d_ptr[0];
+    thrust::copy(thrust::device, potential_collisions_d_ptr,potential_collisions_d_ptr +   potential_collisions_idx_d_ptr[0], collisions_d_ptr);
 
-    unsigned int colCount = thrust::copy_if(thrust::device, potential_collisions_d_ptr,
-            potential_collisions_d_ptr + potential_collisions_idx_d_ptr[0],
-            collisions_d_ptr,
-            check_potential_collisions) - collisions_d_ptr;
+    // unsigned int colCount = thrust::copy_if(thrust::device, potential_collisions_d_ptr,
+    //         potential_collisions_d_ptr + potential_collisions_idx_d_ptr[0],
+    //         collisions_d_ptr,
+    //         check_potential_collisions) - collisions_d_ptr;
 
-    num_collisions_d_ptr[0] = colCount;
+    // num_collisions_d_ptr[0] = colCount;
     return num_collisions_d_ptr[0];
 }
 

@@ -56,6 +56,8 @@ int findSplit(unsigned long long int *sortedMortonCodes, unsigned int first, uns
 
     // this should never occur based on how we create the morton numbers from ranked position.
     if (firstCode == lastCode) {
+        printf("ERROR! Morton Codes are not unique!\n");
+        assert(0);
         return (first + last) >> 1;
     }
 
@@ -182,14 +184,17 @@ void find_potential_collisions_func::operator()(unsigned int idx) {
     *stackPtr++ = 0xFFFFFFFF; // push onto stack.
     unsigned int node = 0; // root of BVH tree.
 
+    int num_collisions_for_obj = 0;
+    unsigned int childL, childR, childLR, childRR;
+    bool overlapL, overlapR;
     do {
-        unsigned int childL = internalChildrenA[node];
-        unsigned int childR = internalChildrenB[node];
-        bool overlapL = overlap(boundingBoxTree + idx, boundingBoxTree + childL);
-        bool overlapR = overlap(boundingBoxTree + idx, boundingBoxTree + childR);
+        childL = internalChildrenA[node];
+        childR = internalChildrenB[node];
+        overlapL = overlap(boundingBoxTree + idx, boundingBoxTree + childL);
+        overlapR = overlap(boundingBoxTree + idx, boundingBoxTree + childR);
 
-        unsigned int childLR = childL;
-        unsigned int childRR = childR;
+        childLR = childL;
+        childRR = childR;
 
         while (childLR < NUM_INTERNAL) {
             childLR = internalChildrenB[childLR];
@@ -214,6 +219,7 @@ void find_potential_collisions_func::operator()(unsigned int idx) {
             }
             potentialCollisionList[currCollisionIdx].a = min(childLId, thisObjectId); //thisObjectId;
             potentialCollisionList[currCollisionIdx].b = max(childLId, thisObjectId); //childLId;
+            num_collisions_for_obj++;
         }
         if (childR != idx && overlapR && childR >= NUM_INTERNAL) {
             // potential collision found. add to list
@@ -224,6 +230,7 @@ void find_potential_collisions_func::operator()(unsigned int idx) {
             }
             potentialCollisionList[currCollisionIdx].a = min(childRId, thisObjectId); //thisObjectId;
             potentialCollisionList[currCollisionIdx].b = max(childRId, thisObjectId); //chilRLId;
+            num_collisions_for_obj++;
         }
         bool traverseL = (overlapL && childL < NUM_INTERNAL);
         bool traverseR = (overlapR && childR < NUM_INTERNAL);
@@ -237,6 +244,17 @@ void find_potential_collisions_func::operator()(unsigned int idx) {
             }
         }
     } while (node != 0xFFFFFFFF);
+    if (num_collisions_for_obj == 0) {
+        BoundingBox bb  = boundingBoxTree[idx];
+        BoundingBox bbL = boundingBoxTree[childL];
+        BoundingBox bbR = boundingBoxTree[childR];
+
+        // printf("Leaf node idx %4u (real idx %4u) 0 collisions. At: [(%5.2f %5.2f), (%5.2f %5.2f), (%5.2f %5.2f)]\n"\
+        //        "      childL: %4u, childLR: %4u, overlapL: %d       [(%5.2f %5.2f), (%5.2f %5.2f), (%5.2f %5.2f)]\n"\
+        //        "      childR: %4u, childRR: %4u, overlapR: %d       [(%5.2f %5.2f), (%5.2f %5.2f), (%5.2f %5.2f)]\n\n", idx, thisObjectId, bb.x_min, bb.x_max, bb.y_min, bb.y_max, bb.z_min, bb.z_max, 
+        //                                                                                             childL, childLR, (int)overlap(&bb, &bbL), bbL.x_min, bbL.x_max, bbL.y_min, bbL.y_max, bbL.z_min, bbL.z_max, 
+        //                                                                                             childR, childRR, (int)overlap(&bb, &bbR), bbR.x_min, bbR.x_max, bbR.y_min, bbR.y_max, bbR.z_min, bbR.z_max );
+    }
 }
 
 __device__

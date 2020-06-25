@@ -18,7 +18,7 @@
 #include "BoundingBox.cuh"
 #include "Collisions.cuh"
 #include "Morton.cuh"
-
+#include "Utils.cuh"
 
 class CollisionSystem {
 
