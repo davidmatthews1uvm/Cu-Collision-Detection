@@ -244,17 +244,6 @@ void find_potential_collisions_func::operator()(unsigned int idx) {
             }
         }
     } while (node != 0xFFFFFFFF);
-    if (num_collisions_for_obj == 0) {
-        BoundingBox bb  = boundingBoxTree[idx];
-        BoundingBox bbL = boundingBoxTree[childL];
-        BoundingBox bbR = boundingBoxTree[childR];
-
-        // printf("Leaf node idx %4u (real idx %4u) 0 collisions. At: [(%5.2f %5.2f), (%5.2f %5.2f), (%5.2f %5.2f)]\n"\
-        //        "      childL: %4u, childLR: %4u, overlapL: %d       [(%5.2f %5.2f), (%5.2f %5.2f), (%5.2f %5.2f)]\n"\
-        //        "      childR: %4u, childRR: %4u, overlapR: %d       [(%5.2f %5.2f), (%5.2f %5.2f), (%5.2f %5.2f)]\n\n", idx, thisObjectId, bb.x_min, bb.x_max, bb.y_min, bb.y_max, bb.z_min, bb.z_max, 
-        //                                                                                             childL, childLR, (int)overlap(&bb, &bbL), bbL.x_min, bbL.x_max, bbL.y_min, bbL.y_max, bbL.z_min, bbL.z_max, 
-        //                                                                                             childR, childRR, (int)overlap(&bb, &bbR), bbR.x_min, bbR.x_max, bbR.y_min, bbR.y_max, bbR.z_min, bbR.z_max );
-    }
 }
 
 __device__

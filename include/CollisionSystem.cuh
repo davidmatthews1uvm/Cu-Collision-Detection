@@ -34,22 +34,21 @@ public:
 
     unsigned int get_max_collisions_per_mass() { return MAX_COLLISIONS_PER_OBJECT; }
 
-    /**
-     * Resize the number of masses in the system
-     *
-     * NOTE: if we did not allocate host vectors, we will not resize them. we will assume that you have resized them for us!.
-     * @param n new size
-     */
-    void set_num_masses(size_t n);
+    void set_num_objects(size_t n) {
+        set_num_objects_device(n);
+        set_num_objects_host(n);
+    }
 
     /**
-     * reserve space for new masses in the system so that future calls to set_num_masses are faster.
-     * Does not shrink reservations if we already have memory allocated.
      *
-     * NOTE: if we did not allocate host vectors, we will not resize them. we will assume that you have resized them for us!.
-     * @param n new reserved size.
+     *
+     * @param n Number of objects in scene
      */
-    void set_reserved_num_masses(size_t n);
+    __host__ __device__
+    void set_num_objects_device(size_t n);
+
+    void set_num_objects_host(size_t n);
+
 
     /**
      * Change how many collisions per mass are supported by the system.
@@ -57,6 +56,7 @@ public:
      */
     void set_max_num_cols_per_mass(size_t m);
 
+    __host__ __device__
     void update_device_pointers_and_functors();
 
     /**
@@ -94,34 +94,34 @@ public:
     void set_collisions_host(Collision *c_ha) { host_collisions_a = c_ha; }
 
     void sync_collisions_to_host() {
-        thrust::copy(collisions.begin(), collisions.end(), host_collisions_a);
+        thrust::copy(collisions_d_ptr, collisions_d_ptr + N, host_collisions_a);
     }
 
     /**
      * Get a pointer to the x pos device array.
      * @return pointer to first element in x_pos device array.
      */
-    float *get_x_pos_device() { return thrust::raw_pointer_cast(x_pos_d.data()); }
+    float *get_x_pos_device() { return x_pos_d_ptr; }
 
     /**
      * Get a pointer to the y pos device array.
      * @return pointer to first element in y_pos device array.
      */
-    float *get_y_pos_device() { return thrust::raw_pointer_cast(y_pos_d.data()); }
+    float *get_y_pos_device() { return y_pos_d_ptr; }
 
     /**
      * Get a pointer to the z pos device array.
      * @return pointer to the first element in z_pos device array.
      */
-    float *get_z_pos_device() { return thrust::raw_pointer_cast(z_pos_d.data()); }
+    float *get_z_pos_device() { return z_pos_d_ptr; }
 
     /**
      * Get a pointer to the radius device array.
      * @return pointer to the radius device array.
      */
-    float *get_radius_device() { return thrust::raw_pointer_cast(radius_d.data()); }
+    float *get_radius_device() { return radius_d_ptr; }
 
-    Collision *get_collisions_device_ptr() { return thrust::raw_pointer_cast(collisions.data()); }
+    Collision *get_collisions_device_ptr() { return collisions_d_ptr; }
 
     /**
      * Inform the CollisionSystem that the X, Y, and Z host positions have changed.
@@ -213,7 +213,10 @@ public:
      * @return number of collisions found. returns -1 if we did not have enough memory to save all collisions.
      */
     __device__
-    int find_collisions_device();
+    int find_collisions_device(int pruneLevel);
+
+    __device__
+    int find_collisions_device() { return find_collisions_device(1); }
 
     /**
      * Brute force N^2 algorithm to find collisions. This is faster for small values of N.
@@ -227,71 +230,60 @@ public:
 
     size_t N, RESERVATION_SIZE, MAX_COLLISIONS_PER_OBJECT;
 
-    int * num_collisions_d_ptr;
-    thrust::device_vector<int> num_collisions_d;
+    bool needAllocate = true;
+
+    int *num_collisions_d_ptr = nullptr;
 
     thrust::counting_iterator<unsigned int> start;
-    thrust::counting_iterator<unsigned int> end;
 
     // buffer for sorting with CUB
     size_t cub_sort_bytes_size;
-    void *cub_sort_bytes_ptr;
+    void *cub_sort_bytes_ptr = nullptr;
 
     // host positions
-    float *x_pos_h, *y_pos_h, *z_pos_h, *radius_h;
+    float *x_pos_h = nullptr;
+    float *y_pos_h = nullptr;
+    float *z_pos_h = nullptr;
+    float *radius_h = nullptr;
+
     bool allocatedByUs;
+    bool requiresRebuild = true;
 
     // device positions
-    float *x_pos_d_ptr, *y_pos_d_ptr, *z_pos_d_ptr, *tmp_pos_d_ptr, *radius_d_ptr;
-
-    thrust::device_vector<float> x_pos_d;
-    thrust::device_vector<float> y_pos_d;
-    thrust::device_vector<float> z_pos_d;
-    thrust::device_vector<float> tmp_pos_d;
-
-    // radiuses of each voxel
-    thrust::device_vector<float> radius_d;
+    float *x_pos_d_ptr = nullptr;
+    float *y_pos_d_ptr = nullptr;
+    float *z_pos_d_ptr = nullptr;
+    float *tmp_pos_d_ptr = nullptr;
+    float *radius_d_ptr = nullptr;
 
     //rank and id vectors.
-    unsigned int *x_rank_d_ptr, *y_rank_d_ptr, *z_rank_d_ptr, *tmp_id_a_d_ptr, *tmp_id_b_d_ptr;
-
-    thrust::device_vector<unsigned int> x_rank_d;
-    thrust::device_vector<unsigned int> y_rank_d;
-    thrust::device_vector<unsigned int> z_rank_d;
-
-    thrust::device_vector<unsigned int> tmp_id_a_d;
-    thrust::device_vector<unsigned int> tmp_id_b_d;
+    unsigned int *x_rank_d_ptr = nullptr;
+    unsigned int *y_rank_d_ptr = nullptr;
+    unsigned int *z_rank_d_ptr = nullptr;
+    unsigned int *tmp_id_a_d_ptr = nullptr;
+    unsigned int *tmp_id_b_d_ptr = nullptr;
 
     // Morton numbers vector.
-    unsigned long long int *mortons_d_ptr, *mortons_tmp_d_ptr;
-    unsigned int *mortons_id_d_ptr;
-
-    thrust::device_vector<unsigned long long int> mortons_d;
-    thrust::device_vector<unsigned long long int> mortons_tmp_d;
-    thrust::device_vector<unsigned int> mortons_id_d;
-
+    unsigned long long int *mortons_d_ptr = nullptr;
+    unsigned long long int *mortons_tmp_d_ptr = nullptr;
+    unsigned int *mortons_id_d_ptr = nullptr;
 
     // vectors for the BVH tree
     // for the leaf nodes & internal nodes
-    unsigned int *leaf_parent_d_ptr, *internal_parent_d_ptr, *internal_childA_d_ptr, *internal_childB_d_ptr;
-    thrust::device_vector<unsigned int> leaf_parent_d;
-    thrust::device_vector<unsigned int> internal_parent_d;
-    thrust::device_vector<unsigned int> internal_childA_d;
-    thrust::device_vector<unsigned int> internal_childB_d;
+    unsigned int *leaf_parent_d_ptr = nullptr;
+    unsigned int *internal_parent_d_ptr = nullptr;
+    unsigned int *internal_childA_d_ptr = nullptr;
+    unsigned int *internal_childB_d_ptr = nullptr;
 
     // for the bounding boxes for all leaf and internal nodes.
-    unsigned int *internal_node_bbox_complete_flag_d_ptr;
-    BoundingBox *bounding_boxes_d_ptr;
-    thrust::device_vector<unsigned int> internal_node_bbox_complete_flag;
-    thrust::device_vector<BoundingBox> bounding_boxes_d;
+    unsigned int *internal_node_bbox_complete_flag_d_ptr = nullptr;
+    BoundingBox *bounding_boxes_d_ptr = nullptr;
 
-    unsigned int *potential_collisions_idx_d_ptr;
-    Collision *potential_collisions_d_ptr, *collisions_d_ptr;
-    thrust::device_vector<unsigned int> potential_collisions_idx; // keep track of the idx for the collision we are at.
-    thrust::device_vector<Collision> potential_collisions;
-    thrust::device_vector<Collision> collisions;
-    Collision* host_collisions_a;
-    int* host_collisions_b;
+    unsigned int *potential_collisions_idx_d_ptr = nullptr;
+    Collision *potential_collisions_d_ptr = nullptr;
+    Collision *collisions_d_ptr = nullptr;
+    Collision* host_collisions_a = nullptr;
+    int* host_collisions_b = nullptr;
 
     init_morton_func compute_morton_numbers;
     build_bvh_tree_func build_bvh_tree;

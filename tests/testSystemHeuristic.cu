@@ -209,10 +209,16 @@ bool testSmallSystemsFromGPU(int verbose) {
 
     initKernel<<<1,1>>>(colSystem_d);
     find_cols_tree_Kernel<<<1,1>>>(colSystem_d);
-    int numbCollisionsTree = colSystem->num_collisions_d[0];
+    int numbCollisionsTree;
+    cudaMemcpy((void*)&numbCollisionsTree, colSystem->num_collisions_d_ptr, sizeof(int), cudaMemcpyDeviceToHost);
+    CUDA_CHECK_AFTER_CALL();
+    VcudaDeviceSynchronize();
 
     find_cols_N2_Kernel<<<1,1>>>(colSystem_d);
-    int numbCollisionsN2= colSystem->num_collisions_d[0];
+    int numbCollisionsN2;
+    cudaMemcpy((void*)&numbCollisionsN2, colSystem->num_collisions_d_ptr, sizeof(int), cudaMemcpyDeviceToHost);
+    CUDA_CHECK_AFTER_CALL();
+    VcudaDeviceSynchronize();
 
     delete colSystem;
     cudaFree(colSystem_d);
@@ -253,12 +259,16 @@ bool testSmallSystemsFromGPU(int verbose) {
     colSystem->update_all_from_host();
     initKernel<<<1,1>>>(colSystem_d);
     find_cols_tree_Kernel<<<1,1>>>(colSystem_d);
-    numbCollisionsTree = colSystem->num_collisions_d[0];
+
+    cudaMemcpy((void*)&numbCollisionsTree, colSystem->num_collisions_d_ptr, sizeof(int), cudaMemcpyDeviceToHost);
+    CUDA_CHECK_AFTER_CALL();
+    VcudaDeviceSynchronize();
 
     find_cols_N2_Kernel<<<1,1>>>(colSystem_d);
-    numbCollisionsN2= colSystem->num_collisions_d[0];
+    cudaMemcpy((void*)&numbCollisionsN2, colSystem->num_collisions_d_ptr, sizeof(int), cudaMemcpyDeviceToHost);
+    CUDA_CHECK_AFTER_CALL();
+    VcudaDeviceSynchronize();
 
-    numbCollisionsTree = colSystem->num_collisions_d[0];
     delete colSystem;
     cudaFree(colSystem_d);
 
@@ -297,12 +307,17 @@ bool testSmallSystemsFromGPU(int verbose) {
     colSystem->update_all_from_host();
     initKernel<<<1,1>>>(colSystem_d);
     find_cols_tree_Kernel<<<1,1>>>(colSystem_d);
-    numbCollisionsTree = colSystem->num_collisions_d[0];
+    cudaMemcpy((void*)&numbCollisionsTree, colSystem->num_collisions_d_ptr, sizeof(int), cudaMemcpyDeviceToHost);
+    CUDA_CHECK_AFTER_CALL();
+    VcudaDeviceSynchronize();
+
 
     find_cols_N2_Kernel<<<1,1>>>(colSystem_d);
-    numbCollisionsN2= colSystem->num_collisions_d[0];
+    cudaMemcpy((void*)&numbCollisionsN2, colSystem->num_collisions_d_ptr, sizeof(int), cudaMemcpyDeviceToHost);
+    CUDA_CHECK_AFTER_CALL();
+    VcudaDeviceSynchronize();
 
-    numbCollisionsTree = colSystem->num_collisions_d[0];
+
     delete colSystem; // keep the colSystem_d -- we will reuse the memory.
     cudaFree(colSystem_d);
     if (numbCollisionsN2 != 3) {
@@ -343,7 +358,8 @@ bool testN2CollisionSystemHeuristic(int verbose) {
     colSystem->update_all_from_host();
 
     unsigned int numColsGPU = colSystem->find_collisions_N2();
-    thrust::sort(colSystem->collisions.begin(), colSystem->collisions.begin() + numColsGPU);
+    thrust::device_ptr<Collision> col_d_ptr(colSystem->collisions_d_ptr);
+    thrust::sort(col_d_ptr, col_d_ptr + numColsGPU);
 
     thrust::host_vector<Collision> collisions_cpu_h(
             colSystem->get_num_masses() * colSystem->get_max_collisions_per_mass());
@@ -373,7 +389,7 @@ bool testN2CollisionSystemHeuristic(int verbose) {
         error = true;
     }
 
-    if (!thrust::equal(collisions_cpu_d.begin(), collisions_cpu_d.end(), colSystem->collisions.begin())) {
+    if (!thrust::equal(collisions_cpu_d.begin(), collisions_cpu_d.begin() + numColsCPU, col_d_ptr)){
         if (verbose > 0){
             std::cout << "Error!\nGPU and CPU collision detection diverged!" << std::endl;
 
@@ -436,7 +452,9 @@ bool testTreeCollisionSystemHeuristic(int verbose) {
             colSystem->update_bounding_boxes();
 
             unsigned int numColsGPU = colSystem->find_collisions();
-            thrust::sort(colSystem->collisions.begin(), colSystem->collisions.begin() + numColsGPU);
+            thrust::device_ptr<Collision> col_d_ptr(colSystem->collisions_d_ptr);
+            thrust::sort(col_d_ptr, col_d_ptr + numColsGPU);
+
 
             thrust::host_vector<Collision> collisions_cpu_h(
                     colSystem->get_num_masses() * colSystem->get_max_collisions_per_mass());
@@ -466,7 +484,7 @@ bool testTreeCollisionSystemHeuristic(int verbose) {
                 error = true;
             }
 
-            if (!thrust::equal(collisions_cpu_d.begin(), collisions_cpu_d.end(), colSystem->collisions.begin())) {
+            if (!thrust::equal(thrust::device, collisions_cpu_d.begin(), collisions_cpu_d.begin() + numColsCPU, col_d_ptr)) {
                 if (verbose > 0){
                     std::cout << "Error!\nGPU and CPU collision detection diverged!" << std::endl;
 
@@ -476,7 +494,7 @@ bool testTreeCollisionSystemHeuristic(int verbose) {
 
             if (error && verbose > 1) {
                 thrust::host_vector<Collision> collisions_cpu_h = collisions_cpu_d;
-                thrust::host_vector<Collision> collisions_gpu_h = colSystem->collisions;
+                thrust::host_vector<Collision> collisions_gpu_h(col_d_ptr, col_d_ptr + numColsGPU );
 
                 unsigned int cpuIdx = 0;
                 unsigned int gpuIdx = 0;

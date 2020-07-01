@@ -63,9 +63,11 @@ struct build_bvh_tree_func {
     unsigned long long int *sortedMortonCodes;
     unsigned int *leaf_parents, *internal_parents, *internal_childA, *internal_childB;
 
+    __host__ __device__
     build_bvh_tree_func() :
             build_bvh_tree_func(0, nullptr, nullptr, nullptr, nullptr, nullptr) {}
 
+    __host__ __device__
     build_bvh_tree_func(unsigned int N, unsigned long long int *sortedMortonCodes, unsigned int *leaf_parents,
                         unsigned int *internal_parents, unsigned int *internal_childA, unsigned int *internal_childB) :
             N(N), sortedMortonCodes(sortedMortonCodes), leaf_parents(leaf_parents), internal_parents(internal_parents),
@@ -86,6 +88,7 @@ struct fill_bvh_tree_with_bounding_boxes_func {
     unsigned int *sortedMortonIds;
     unsigned int *leaf_parents, *internal_parents, *internal_childA, *internal_childB, *bbox_complete_flag;
 
+    __host__ __device__
     fill_bvh_tree_with_bounding_boxes_func() :
             fill_bvh_tree_with_bounding_boxes_func(0,
                     nullptr,
@@ -100,6 +103,7 @@ struct fill_bvh_tree_with_bounding_boxes_func {
                     nullptr,
                     nullptr) {}
 
+    __host__ __device__
     fill_bvh_tree_with_bounding_boxes_func(unsigned int N, BoundingBox *bboxTree, float *xPts, float *yPts, float *zPts,
                                            float *radius, unsigned int *sortedMortonIds, unsigned int *leaf_parents,
                                            unsigned int *internal_parents, unsigned int *internal_childA,
@@ -124,6 +128,7 @@ struct find_potential_collisions_func {
     Collision *potentialCollisionList;
     float *x, *y, *z, *r;
 
+    __host__ __device__
     find_potential_collisions_func() :
             find_potential_collisions_func(0,
                     0,
@@ -138,6 +143,7 @@ struct find_potential_collisions_func {
                     nullptr,
                     nullptr) {}
 
+    __host__ __device__
     find_potential_collisions_func(unsigned int N, unsigned int max_cols, unsigned int *sortedMortonIds,
                                    BoundingBox *boundingBoxTree, unsigned int *internalChildrenA,
                                    unsigned int *internalChildrenB, unsigned int *potentialCollisionIdx,
@@ -164,9 +170,11 @@ struct find_potential_collisions_func {
 struct check_potential_collisions_func {
     float *x, *y, *z, *r;
 
+    __host__ __device__
     check_potential_collisions_func() :
             check_potential_collisions_func(nullptr, nullptr, nullptr, nullptr) {}
 
+    __host__ __device__
     check_potential_collisions_func(float *x, float *y, float *z, float *r) :
             x(x), y(y), z(z), r(r) {}
 
