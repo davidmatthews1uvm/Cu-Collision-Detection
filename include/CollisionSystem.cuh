@@ -200,6 +200,16 @@ public:
     __host__ __device__
     void update_bounding_boxes();
 
+
+    /**
+     * Checks a single sphere for collisions
+     */
+     __host__
+     bool check_collisions(float pX, float pY, float pZ, float pR);
+
+     __device__
+     bool check_collisions_device(float pX, float pY, float pZ, float pRr);
+
     /**
      * compute a list of collisions that have occured.
      * @return number of collisions found. returns -1 if we did not have enough memory to save all found collisions.
@@ -292,6 +302,7 @@ public:
     check_potential_collisions_func check_potential_collisions;
 };
 
+__global__ void check_collisions_single(find_potential_collisions_func functor, float pX, float pY, float pZ, float pR, bool *b);
 __global__ void find_potential_collisions_kernel(int startIdx, int num, find_potential_collisions_func functor);
 __global__ void build_tree_kernel(int startIdx, int num, build_bvh_tree_func functor);
 

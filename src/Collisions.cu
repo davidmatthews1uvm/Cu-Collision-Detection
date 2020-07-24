@@ -154,7 +154,7 @@ unsigned int fill_bvh_tree_with_bounding_boxes_func::operator()(int leafIdx) {
         }
 
         bbox_complete_flag[parentNodeId] = 0; // reset complete flag for future calls to this function.
-        box = const_cast<volatile BoundingBox *> (bboxTree +parentNodeId);
+        box = const_cast<volatile BoundingBox *> (bboxTree + parentNodeId);
         boxL = const_cast<volatile BoundingBox *> (bboxTree + internal_childA[parentNodeId]);
         boxR = const_cast<volatile BoundingBox *> (bboxTree + internal_childB[parentNodeId]);
 
@@ -244,6 +244,53 @@ void find_potential_collisions_func::operator()(unsigned int idx) {
             }
         }
     } while (node != 0xFFFFFFFF);
+}
+
+__device__
+bool find_potential_collisions_func::test_collision(float pX, float pY, float pZ, float pR) {
+    BoundingBox *testBBox = &BoundingBox(pX - pR, pX + pR, pY - pR, pY + pR, pZ - pR, pZ + pR);
+
+    unsigned int stack[128]; // allocate the stack. (> max depth of tree)
+    unsigned int *stackPtr = stack;
+    *stackPtr++ = 0xFFFFFFFF; // push onto stack.
+    unsigned int node = 0; // root of BVH tree.
+
+    unsigned int childL, childR;
+    bool overlapL, overlapR;
+    do {
+        childL = internalChildrenA[node];
+        childR = internalChildrenB[node];
+        overlapL = overlap(testBBox, boundingBoxTree + childL);
+        overlapR = overlap(testBBox, boundingBoxTree + childR);
+
+
+        if (overlapL && childL >= NUM_INTERNAL) { // is this a leaf node ? do bounding boxes overlap?
+            unsigned int childLId = sortedMortonIds[childL - NUM_INTERNAL];
+            if ((x[childLId] - pX) * (x[childLId] - pX) + (y[childLId] - pY) * (y[childLId] - pY) +
+                (z[childLId] - pZ) * (z[childLId] - pZ) <= (r[childLId] + pR) * (r[childLId] + pR)) {
+                return true;
+            }
+        }
+        if (overlapR && childR >= NUM_INTERNAL) {// check if bbox overlaps and if leaf node.
+            unsigned int childRId = sortedMortonIds[childR - NUM_INTERNAL];
+            if ((x[childRId] - pX) * (x[childRId] - pX) + (y[childRId] - pY) * (y[childRId] - pY) +
+                (z[childRId] - pZ) * (z[childRId] - pZ) <= (r[childRId] + pR) * (r[childRId] + pR)) {
+                return true;
+            }
+        }
+        bool traverseL = (overlapL && childL < NUM_INTERNAL);
+        bool traverseR = (overlapR && childR < NUM_INTERNAL);
+
+        if (!traverseL && !traverseR) {
+            node = *--stackPtr; // pop
+        } else {
+            node = (traverseL) ? childL : childR;
+            if (traverseL && traverseR) {
+                *stackPtr++ = childR; // push
+            }
+        }
+    } while (node != 0xFFFFFFFF);
+    return false;
 }
 
 __device__

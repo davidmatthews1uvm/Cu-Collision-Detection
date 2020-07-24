@@ -18,6 +18,7 @@ __global__ void initKernel(CollisionSystem *colSys);
 
 __global__ void find_cols_tree_Kernel(CollisionSystem *colSys);
 __global__ void find_cols_N2_Kernel(CollisionSystem *colSys);
+__global__ void assert_collision(CollisionSystem *colSys, bool expectCollision, float pX, float pY, float pZ, float pR);
 
 bool testSmallSystemsFromGPU(int verbose);
 

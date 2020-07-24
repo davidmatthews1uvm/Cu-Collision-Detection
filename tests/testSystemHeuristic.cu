@@ -36,6 +36,31 @@ bool testSmallSystems(int verbose) {
     colSystem->init();
     int numbCollisionsN2 = colSystem->find_collisions_N2();
     int numbCollisionsTree = colSystem->find_collisions();
+
+    if (!colSystem->check_collisions(0.f, 0.f, 0.f, 1.f)) {
+        if (verbose > 0) {
+            std::cout << "check collision failed 2 particle test (A.i). Expected a collision with test sphere but did not detect one." << std::endl;
+            return false;
+        }
+    }
+    if (colSystem->check_collisions(0.3f, 0.f, 0.f, .10f)) {
+        if (verbose > 0) {
+            std::cout << "check collision failed 2 particle test (A.ii). Expected no collisions with test sphere but detected one." << std::endl;
+            return false;
+        }
+    }
+    if (!colSystem->check_collisions(0.3f, 0.f, 0.f, .10001f)) {
+        if (verbose > 0) {
+            std::cout << "check collision failed 2 particle test (A.iii). Expected a collision with test sphere but did not detect one." << std::endl;
+            return false;
+        }
+    }
+    if (colSystem->check_collisions(10.f, 0.f, 0.f, 1.f)) {
+        if (verbose > 0) {
+            std::cout << "check collision failed 2 particle test (A.iv). Expected a no collisions with test sphere but detected one." << std::endl;
+            return false;
+        }
+    }
     delete colSystem;
 
     if (numbCollisionsN2 != 1) {
@@ -70,6 +95,18 @@ bool testSmallSystems(int verbose) {
     colSystem->init();
     numbCollisionsN2 = colSystem->find_collisions_N2();
     numbCollisionsTree = colSystem->find_collisions();
+    if (!colSystem->check_collisions(0.f, 0.f, 0.f, .0f)) {
+        if (verbose > 0) {
+            std::cout << "check collision failed 2 particle test (B.i). Expected a collision with test sphere but did detect one." << std::endl;
+            return false;
+        }
+    }
+    if (colSystem->check_collisions(0.4f, 0.f, 0.f, .01f)) {
+        if (verbose > 0) {
+            std::cout << "check collision failed 2 particle test (B.ii). Expected no collisions with test sphere but detected one." << std::endl;
+            return false;
+        }
+    }
     delete colSystem;
 
 
@@ -184,6 +221,12 @@ __global__ void find_cols_N2_Kernel(CollisionSystem *colSys) {
     }
 }
 
+__global__ void assert_collision(CollisionSystem *colSys, bool expectCollision, float pX, float pY, float pZ, float pR) {
+    if (threadIdx.x + blockDim.x * blockIdx.x < 1) {
+        assert(colSys->check_collisions_device(pX, pY, pZ, pR) == expectCollision);
+    }
+}
+
 bool testSmallSystemsFromGPU(int verbose) {
     CollisionSystem *colSystem = new CollisionSystem(2, 1, true);
     CollisionSystem *colSystem_d;
@@ -220,7 +263,12 @@ bool testSmallSystemsFromGPU(int verbose) {
     CUDA_CHECK_AFTER_CALL();
     VcudaDeviceSynchronize();
 
+    assert_collision<<<1,1>>>(colSystem_d, true,  0.f, 0.f, 0.f, 1.f);
+    assert_collision<<<1,1>>>(colSystem_d, false, 0.3f, 0.f, 0.f, .10f);
+    assert_collision<<<1,1>>>(colSystem_d, true,  0.3f, 0.f, 0.f, .10001f);
+    assert_collision<<<1,1>>>(colSystem_d, false, 10.f, 0.f, 0.f, 1.f);
     delete colSystem;
+
     cudaFree(colSystem_d);
     if (numbCollisionsN2 != 1) {
         if (verbose > 0) {
@@ -268,6 +316,11 @@ bool testSmallSystemsFromGPU(int verbose) {
     cudaMemcpy((void*)&numbCollisionsN2, colSystem->num_collisions_d_ptr, sizeof(int), cudaMemcpyDeviceToHost);
     CUDA_CHECK_AFTER_CALL();
     VcudaDeviceSynchronize();
+
+    assert_collision<<<1,1>>>(colSystem_d, true,  0.f, 0.f, 0.f, 1.f);
+    assert_collision<<<1,1>>>(colSystem_d, true,  0.f, 0.f, 0.f, 0.f);
+    assert_collision<<<1,1>>>(colSystem_d, false,  0.4f, 0.f, 0.f, .01f);
+
 
     delete colSystem;
     cudaFree(colSystem_d);

@@ -162,6 +162,9 @@ struct find_potential_collisions_func {
      */
     __device__
     void operator()(unsigned int idx);
+
+    __device__
+    bool test_collision(float pX, float pY, float pZ, float pR);
 };
 
 /**

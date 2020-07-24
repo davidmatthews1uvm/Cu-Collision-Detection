@@ -23,19 +23,34 @@ int main(int argc, char *argv[]) {
 
     bool passedAllTests = true;
 
-    passedAllTests &= runMortonNumberTestOnIntCPU();
-    passedAllTests &= runMortonNumberTestOnIntGPU();
-    passedAllTests &= runMortonNumberTestOnIntGPUFromGPU();
-    passedAllTests &= runMortonNumberTestOnFloat();
-    passedAllTests &= runSmallSystemTests();
-    passedAllTests &= runSmallSystemTestsFromGPU();
-    passedAllTests &= runN2SystemHeuristicTest();
+    if (passedAllTests)
+        passedAllTests &= runMortonNumberTestOnIntCPU();
 
-    if (argc > 1) {
-        std::cout << "Running Tree Heuristic Tests..." << std::endl;
-        passedAllTests &= runTreeSystemHeuristicTest();
-    } else {
-        std::cout << "Skipping Tree Heuristic Tests" << std::endl;
+    if (passedAllTests)
+        passedAllTests &= runMortonNumberTestOnIntGPU();
+
+    if (passedAllTests)
+        passedAllTests &= runMortonNumberTestOnIntGPUFromGPU();
+
+    if (passedAllTests)
+        passedAllTests &= runMortonNumberTestOnFloat();
+
+    if (passedAllTests)
+        passedAllTests &= runSmallSystemTests();
+
+    if (passedAllTests)
+        passedAllTests &= runSmallSystemTestsFromGPU();
+
+    if (passedAllTests)
+        passedAllTests &= runN2SystemHeuristicTest();
+
+    if (passedAllTests) {
+        if (argc > 1) {
+            std::cout << "Running Tree Heuristic Tests..." << std::endl;
+            passedAllTests &= runTreeSystemHeuristicTest();
+        } else {
+            std::cout << "Skipping Tree Heuristic Tests" << std::endl;
+        }
     }
 
     if (passedAllTests) {
@@ -208,7 +223,7 @@ bool runSmallSystemTests() {
     std::cout << "\rTesting Small Collision Systems ... " << std::flush;
 
     if (didPass) {
-        std::cout << " Passed 7 tests" << std::endl;
+        std::cout << " Passed 13 tests" << std::endl;
         return true;
     } else {
         std::cout << " Failed!" << std::endl;
@@ -220,7 +235,7 @@ bool runSmallSystemTestsFromGPU() {
     std::cout << "\rTesting Small Collision Systems from GPU ... " << std::flush;
 
     if (didPass) {
-        std::cout << " Passed 6 tests" << std::endl;
+        std::cout << " Passed 13 tests" << std::endl;
         return true;
     } else {
         std::cout << " Failed!" << std::endl;

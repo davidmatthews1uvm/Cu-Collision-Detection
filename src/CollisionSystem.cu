@@ -444,6 +444,18 @@ void CollisionSystem::update_bounding_boxes() {
 }
 
 __host__
+bool CollisionSystem::check_collisions(float pX, float pY, float pZ, float pR) {
+    thrust::device_vector<bool> result(1);
+    check_collisions_single<<<1,1>>>(find_potential_collisions, pX, pY, pZ, pR, thrust::raw_pointer_cast(result.data()));
+    return result[0];
+}
+
+__device__
+bool CollisionSystem::check_collisions_device(float pX, float pY, float pZ, float pR) {
+    return find_potential_collisions.test_collision(pX, pY, pZ, pR);
+}
+
+__host__
 int CollisionSystem::find_collisions() {
     cudaMemset(potential_collisions_idx_d_ptr, 0, sizeof(unsigned int));
     find_potential_collisions.N = N;
@@ -551,6 +563,13 @@ int CollisionSystem::find_collisions_N2_device() {
 
     num_collisions_d_ptr[0] = potential_collisions_idx_d_ptr[0];
     return potential_collisions_idx_d_ptr[0];
+}
+
+__global__ void check_collisions_single(find_potential_collisions_func functor, float pX, float pY, float pZ, float pR, bool *b) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if (tid == 0) {
+        *b = functor.test_collision(pX, pY, pZ, pR);
+    }
 }
 
 __global__ void find_potential_collisions_kernel(int startIdx, int num, find_potential_collisions_func functor) {
